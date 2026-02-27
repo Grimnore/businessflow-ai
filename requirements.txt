@@ -1,0 +1,20 @@
+# BusinessFlow AI — Python dependencies
+# Install: pip install -r requirements.txt
+
+# Azure
+azure-functions>=1.20.0
+azure-identity>=1.17.1
+openai>=1.35.0          # AzureOpenAI client
+
+# Data validation
+pydantic>=2.0.0       # v1 API (compatible with SK and older Azure SDKs)
+
+# Microsoft Semantic Kernel (orchestration — used by orchestrator layer)
+semantic-kernel>=1.14.0
+
+# Testing
+pytest>=8.2.2
+pytest-asyncio>=0.23.7
+
+# Utilities
+python-dotenv>=1.0.1    # load .env in local dev
