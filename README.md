@@ -4,7 +4,22 @@
 
 ---
 
-## Architecture
+## 🚦 Current Build Status
+
+| Component | Status | Tests |
+|---|---|---|
+| Planner Agent | ✅ Done | 12/12 passing |
+| Retriever Agent | ✅ Done | 25/25 passing |
+| Policy Layer | 🔲 In Progress | — |
+| Executor Agent | 🔲 Pending | — |
+| Approval Dashboard | 🔲 Pending | — |
+| Graph API Integration | 🔲 Pending | — |
+
+**Total tests passing: 37/37 ✅**
+
+---
+
+## 🏗️ Architecture
 
 ```
 Supplier Email
@@ -39,17 +54,23 @@ Azure Function Trigger (HTTP / Event Grid)
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 businessflow-ai/
 ├── planner_agent/
 │   ├── __init__.py
-│   └── planner.py          ← Planner Agent (Azure OpenAI, Pydantic)
+│   └── planner.py          ← ✅ Planner Agent (Azure OpenAI, Pydantic v2)
+├── retriever_agent/
+│   ├── __init__.py
+│   ├── retriever.py        ← ✅ Retriever Agent (MockDB + AzureSQL backends)
+│   └── schema.sql          ← Azure SQL table definitions + seed data
 ├── tests/
-│   └── test_planner.py     ← Full test suite (offline, mocked)
+│   ├── __init__.py
+│   ├── test_planner.py     ← ✅ 12 tests (all offline/mocked)
+│   └── test_retriever.py   ← ✅ 25 tests (all offline/mocked)
 ├── function_app.py         ← Azure Functions HTTP trigger
-├── demo.py                 ← Quick local demo script
+├── demo.py                 ← Pipeline demo (Planner + Retriever)
 ├── requirements.txt
 ├── .env.example            ← Copy to .env and fill in credentials
 └── README.md
@@ -57,77 +78,114 @@ businessflow-ai/
 
 ---
 
-## Quick Start
+## ⚡ Quick Start
 
-### 1. Install dependencies
+### 1. Requirements
+- Python 3.12 (3.14 not supported yet due to pydantic-core wheel availability)
+- Git
+
+### 2. Clone and install
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/Grimnore/businessflow-ai.git
+cd businessflow-ai
+py -3.12 -m pip install -r requirements.txt
 ```
 
-### 2. Configure credentials
+### 3. Configure credentials (optional for now)
 ```bash
 cp .env.example .env
-# Edit .env with your Azure OpenAI endpoint, API key, and deployment name
+# Fill in Azure OpenAI credentials only if running real API calls
+# Leave blank to use mock mode
 ```
 
-### 3. Run the demo
+### 4. Run the pipeline demo (no Azure needed!)
 ```bash
-python demo.py
+py -3.12 demo.py
 ```
 
-### 4. Run tests (no Azure credentials needed)
-```bash
-pytest tests/ -v
+Expected output:
+```
+[STAGE 1] Planner Agent
+  Plan ID     : demo-plan-001
+  Supplier    : Sunrise Textiles Pvt. Ltd.
+  Items       : 3
+  Order Value : Rs.247,500.00
+
+[STAGE 2] Retriever Agent
+  [YELLOW] [SKU-TSH-001] Cotton T-Shirt — LOW_STOCK (45/50)
+  [YELLOW] [SKU-JNS-042] Denim Jeans    — LOW_STOCK (12/30)
+  [RED]    [SKU-SNK-007] Sneakers       — OUT_OF_STOCK (0/20)
 ```
 
-### 5. Run the Azure Function locally
+### 5. Run all tests
 ```bash
-func start
-# Then POST to http://localhost:7071/api/planner
+py -3.12 -m pytest tests/ -v
+# 37 passed ✅
 ```
 
 ---
 
-## Planner Agent — What it does
+## ✅ What's Built
 
-The Planner Agent is the **first step** in the BusinessFlow AI pipeline.
+### Planner Agent (`planner_agent/planner.py`)
+The entry point of the pipeline. Takes a raw supplier email and produces a structured `ExecutionPlan`.
 
-Given a raw supplier email, it:
-1. Calls **Azure OpenAI** (GPT-4o) with a structured function-calling prompt
-2. Extracts: supplier info, SKU IDs, quantities, unit prices, delivery dates
-3. Returns a validated **`ExecutionPlan`** Pydantic model
-4. Attaches a **confidence score** so the Policy Layer can flag ambiguous emails
+- Calls **Azure OpenAI (GPT-4o)** with function-calling for reliable structured extraction
+- Extracts: supplier info, SKU IDs, quantities, unit prices, delivery dates
+- Returns a validated **`ExecutionPlan`** Pydantic model with confidence score
+- Triggered via **Azure Functions** HTTP endpoint (`function_app.py`)
+- Fully testable offline via mocked Azure calls
 
-### Example Input
-```
-Hi, we can supply:
-- SKU-TSH-001: 300 units @ ₹180/unit
-- SKU-JNS-042: 150 units @ ₹650/unit
-Delivery: 15 July 2025
-```
+**Key models:** `LineItem`, `ExecutionPlan`
 
-### Example Output
-```json
-{
-  "plan_id": "a1b2c3d4",
-  "supplier_name": "Sunrise Textiles Pvt. Ltd.",
-  "supplier_email": "ramesh@sunrise-textiles.in",
-  "line_items": [
-    { "sku_id": "SKU-TSH-001", "quantity": 300, "unit_price": 180.0, "total_cost": 54000.0 },
-    { "sku_id": "SKU-JNS-042", "quantity": 150, "unit_price": 650.0, "total_cost": 97500.0 }
-  ],
-  "total_order_value": 151500.0,
-  "confidence_score": 0.97,
-  "delivery_date": "2025-07-15"
-}
-```
+### Retriever Agent (`retriever_agent/retriever.py`)
+Enriches the ExecutionPlan with live inventory context from the database.
+
+- **Two backends:** `MockDB` (zero setup, for dev) and `AzureSQLDB` (production)
+- Switch via `RETRIEVER_BACKEND=mock` or `RETRIEVER_BACKEND=azure_sql` env var
+- Batch-fetches all SKUs in a single DB call
+- Returns a `StockContext` with stock levels, reorder thresholds, unit costs, lead times
+- Detects `OUT_OF_STOCK`, `LOW_STOCK`, `ADEQUATE` status per SKU
+- Handles missing SKUs gracefully with placeholders
+
+**Key models:** `SKUContext`, `StockContext`
+
+### Azure SQL Schema (`retriever_agent/schema.sql`)
+Ready-to-run SQL script for Azure Portal Query Editor. Creates:
+- `inventory` table with seed data (5 sample SKUs)
+- `purchase_orders` table (used by Executor Agent)
+- `audit_log` table (used by Executor Agent)
 
 ---
 
-## Tech Stack
+## 🔲 What's Coming Next
+
+### Policy Layer
+The governance rules engine. Evaluates the `StockContext` against configurable rules:
+- Auto-approve orders under ₹50,000
+- Escalate orders at or above ₹50,000 for human approval
+- Flag low-confidence plans (< 0.7) for review
+- Block orders for missing SKUs
+
+### Executor Agent
+Performs validated actions after policy approval:
+- Updates inventory stock levels in Azure SQL
+- Creates purchase order records
+- Writes to audit log
+- Sends email notifications via Microsoft Graph API
+
+### Approval Dashboard
+Web UI for flagged high-value orders:
+- Lists pending approvals with full order context
+- One-click approve / reject
+- Audit trail viewer
+
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|---|---|
 | AI / LLM | Azure OpenAI (GPT-4o) |
 | Orchestration | Microsoft Semantic Kernel |
 | Trigger | Azure Functions |
@@ -135,14 +193,35 @@ Delivery: 15 July 2025
 | Deployment | Azure Container Apps |
 | Email Integration | Microsoft Graph API |
 | Auth | Azure Active Directory (RBAC) |
+| Validation | Pydantic v2 |
+| Testing | pytest (37 tests, fully offline) |
 
 ---
 
-## Next Steps (Build Order)
+## 🔑 Environment Variables
 
-- [x] **Planner Agent** — Email parsing & ExecutionPlan generation
-- [ ] **Retriever Agent** — Azure SQL stock/threshold lookup
-- [ ] **Policy Layer** — Governance rules engine (₹50k threshold)
-- [ ] **Executor Agent** — DB updates, PO creation, audit logging
-- [ ] **Approval Dashboard** — Web UI for flagged orders
-- [ ] **Graph API Integration** — Live email monitoring
+Copy `.env.example` to `.env` and fill in:
+
+```bash
+# Required for real Planner Agent calls
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
+AZURE_OPENAI_API_KEY=<your-api-key>
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
+
+# Required for production Retriever Agent
+AZURE_SQL_SERVER=<your-server>.database.windows.net
+AZURE_SQL_DATABASE=businessflow
+AZURE_SQL_USERNAME=<username>
+AZURE_SQL_PASSWORD=<password>
+
+# Switch between mock and real DB
+RETRIEVER_BACKEND=mock   # change to azure_sql for production
+```
+
+---
+
+## 👥 Team
+
+**NeuroNekos** — Undergraduate Data Science students, IIT Madras
+- Track: Agent Teamwork (Track 4)
+- Challenge: Microsoft AI Unlocked
