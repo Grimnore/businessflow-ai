@@ -1,90 +1,93 @@
 """
-BusinessFlow AI — Quick Demo
-=============================
-Run this script locally to test the Planner Agent end-to-end
-against a real Azure OpenAI deployment.
+BusinessFlow AI — Pipeline Demo (Planner + Retriever)
+======================================================
+Shows the first two agents working together end-to-end.
 
 Usage:
-    1. Copy .env.example → .env and fill in your credentials
-    2. pip install -r requirements.txt
-    3. python demo.py
+    py -3.12 demo.py
 """
 
-import json
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
-from planner_agent.planner import PlannerAgent
+USE_MOCK_PLAN = os.getenv("AZURE_OPENAI_API_KEY") is None
 
-# ── Demo email ────────────────────────────────────────────────────────────────
 DEMO_EMAIL = """
-Subject: Restocking Confirmation – June 2025 Batch
-
 Hi Team,
-
-We are pleased to confirm availability for your upcoming restocking cycle.
-Please find the details below:
-
-1. Cotton T-Shirt (White, L)     | SKU: SKU-TSH-001 | Qty: 300 units | ₹180/unit
-2. Denim Jeans (32W)             | SKU: SKU-JNS-042 | Qty: 150 units | ₹650/unit
-3. Sports Sneakers (Size 9)      | SKU: SKU-SNK-007 | Qty: 80 units  | ₹1,200/unit
-
-Expected delivery: 15th July 2025
-Payment terms: Net 30 days from invoice date.
-
-Kindly confirm your order at the earliest.
-
-Best regards,
-Ramesh Kumar
-Sunrise Textiles Pvt. Ltd.
-ramesh@sunrise-textiles.in | +91 98765 43210
+We can supply the following items:
+1. Cotton T-Shirt (White, L)   | SKU: SKU-TSH-001 | Qty: 300 units | Rs.180/unit
+2. Denim Jeans (32W)           | SKU: SKU-JNS-042 | Qty: 150 units | Rs.650/unit
+3. Sports Sneakers (Size 9)    | SKU: SKU-SNK-007 | Qty: 80 units  | Rs.1200/unit
+Expected delivery: 2025-07-15. Payment terms: Net 30.
+Ramesh Kumar | ramesh@sunrise-textiles.in
 """
 
-DEMO_SUBJECT = "Restocking Confirmation – June 2025 Batch"
+def get_plan():
+    if USE_MOCK_PLAN:
+        print("No Azure OpenAI key found - using mock plan\n")
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class _Item:
+            sku_id: str
+            product_name: str
+            quantity: int
+            unit_price: float
+            total_cost: float
+
+        @dataclass
+        class _Plan:
+            plan_id: str = "demo-plan-001"
+            supplier_name: str = "Sunrise Textiles Pvt. Ltd."
+            supplier_email: str = "ramesh@sunrise-textiles.in"
+            email_subject: str = "Restocking Confirmation"
+            line_items: list = field(default_factory=list)
+            total_order_value: float = 247500.0
+            confidence_score: float = 0.97
+            delivery_date: str = "2025-07-15"
+
+        plan = _Plan()
+        plan.line_items = [
+            _Item("SKU-TSH-001", "Cotton T-Shirt",  300, 180.0,  54000.0),
+            _Item("SKU-JNS-042", "Denim Jeans",     150, 650.0,  97500.0),
+            _Item("SKU-SNK-007", "Sports Sneakers",  80, 1200.0, 96000.0),
+        ]
+        return plan
+    else:
+        from planner_agent.planner import PlannerAgent
+        return PlannerAgent().parse_email(email_body=DEMO_EMAIL, subject="Restocking Confirmation")
 
 
 def main():
     print("\n" + "="*60)
-    print("  BusinessFlow AI — Planner Agent Demo")
+    print("  BusinessFlow AI - Pipeline Demo")
+    print("  Stage 1: Planner  ->  Stage 2: Retriever")
     print("="*60)
 
-    print("\n📧  Input Email:")
+    print("\n[STAGE 1] Planner Agent")
     print("-"*40)
-    print(DEMO_EMAIL.strip())
+    plan = get_plan()
+    print(f"  Plan ID     : {plan.plan_id}")
+    print(f"  Supplier    : {plan.supplier_name}")
+    print(f"  Items       : {len(plan.line_items)}")
+    print(f"  Order Value : Rs.{plan.total_order_value:,.2f}")
+    print(f"  Confidence  : {plan.confidence_score * 100:.0f}%")
 
-    print("\n🤖  Running Planner Agent...")
-    agent = PlannerAgent()
-    plan = agent.parse_email(email_body=DEMO_EMAIL, subject=DEMO_SUBJECT)
-
-    print("\n✅  Execution Plan Generated:")
+    print("\n[STAGE 2] Retriever Agent")
     print("-"*40)
-    plan_dict = json.loads(plan.json())
+    from retriever_agent.retriever import RetrieverAgent
+    context = RetrieverAgent(backend="mock").retrieve(plan)
 
-    print(f"  Plan ID       : {plan_dict['plan_id']}")
-    print(f"  Supplier      : {plan_dict['supplier_name']} <{plan_dict['supplier_email']}>")
-    print(f"  Delivery Date : {plan_dict['delivery_date']}")
-    print(f"  Confidence    : {plan_dict['confidence_score'] * 100:.0f}%")
-    print(f"\n  Line Items ({len(plan_dict['line_items'])}):")
-    for i, item in enumerate(plan_dict['line_items'], 1):
-        cost = f"₹{item['total_cost']:,.0f}" if item.get('total_cost') else "N/A"
-        print(f"    {i}. [{item['sku_id']}] {item['product_name']}")
-        print(f"       Qty: {item['quantity']} × ₹{item['unit_price']} = {cost}")
+    icons = {"OUT_OF_STOCK": "[RED]", "LOW_STOCK": "[YELLOW]", "ADEQUATE": "[GREEN]"}
+    for s in context.sku_contexts:
+        print(f"\n  {icons.get(s.stock_status, '?')} [{s.sku_id}] {s.product_name}")
+        print(f"     Stock: {s.current_stock} | Threshold: {s.reorder_threshold} | Status: {s.stock_status}")
+        print(f"     Internal Cost: Rs.{s.unit_cost:,.2f}/unit | Lead: {s.supplier_lead_days} days")
 
-    print(f"\n  💰 Total Order Value : ₹{plan_dict['total_order_value']:,.2f}")
-
-    # Policy check preview
-    threshold = float(os.getenv("POLICY_AUTO_APPROVE_THRESHOLD", 50000))
-    if plan.total_order_value >= threshold:
-        print(f"\n  🔴 POLICY: Order exceeds ₹{threshold:,.0f} → Requires manual approval")
-    else:
-        print(f"\n  🟢 POLICY: Order within ₹{threshold:,.0f} → Will auto-execute")
-
-    print("\n  📋 Full JSON Plan:")
-    print(plan.json(indent=2))
-    print("\n" + "="*60)
-
+    print(f"\n  Total DB Stock Value: Rs.{context.total_current_stock_value:,.2f}")
+    print("\n  Next: Policy Layer will evaluate against the Rs.50,000 threshold")
+    print("="*60)
 
 if __name__ == "__main__":
     main()

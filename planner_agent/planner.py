@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from openai import AzureOpenAI
@@ -49,7 +49,7 @@ class LineItem(BaseModel):
 class ExecutionPlan(BaseModel):
     """Structured output produced by the Planner Agent."""
     plan_id: str = Field(..., description="Unique plan identifier (UUID-like)")
-    created_at: str = Field(default_factory=lambda: datetime.now(datetime.timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     supplier_name: str = Field(..., description="Name of the supplier")
     supplier_email: str = Field(..., description="Supplier's email address")
     email_subject: str = Field(..., description="Subject line of the email")
