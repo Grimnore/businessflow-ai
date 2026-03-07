@@ -1,121 +1,172 @@
 """
-BusinessFlow AI — Pipeline Demo (Planner + Retriever + Policy Layer)
+BusinessFlow AI — Full 4-Stage Pipeline Demo
+=============================================
+Planner  →  Retriever  →  Policy Layer  →  Executor Agent
+
+Usage:
+    py -3.12 demo_full.py
 """
+
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
 USE_MOCK_PLAN = os.getenv("AZURE_OPENAI_API_KEY") is None
 
+
 def get_plan():
     if USE_MOCK_PLAN:
-        print("No Azure OpenAI key found - using mock plan\n")
         from dataclasses import dataclass, field
 
         @dataclass
         class _Item:
-            sku_id: str; product_name: str; quantity: int; unit_price: float; total_cost: float
+            sku_id: str
+            product_name: str
+            quantity: int
+            unit_price: float
+            total_cost: float
 
         @dataclass
         class _Plan:
             plan_id: str = "demo-plan-001"
             supplier_name: str = "Sunrise Textiles Pvt. Ltd."
             supplier_email: str = "ramesh@sunrise-textiles.in"
-            email_subject: str = "Restocking Confirmation"
+            email_subject: str = "Restocking Confirmation – June 2025"
             line_items: list = field(default_factory=list)
-            total_order_value: float = 247500.0
+            total_order_value: float = 40000.0
             confidence_score: float = 0.97
             delivery_date: str = "2025-07-15"
 
         plan = _Plan()
         plan.line_items = [
-            _Item("SKU-TSH-001", "Cotton T-Shirt",  300, 180.0,  54000.0),
-            _Item("SKU-JNS-042", "Denim Jeans",     150, 650.0,  97500.0),
-            _Item("SKU-SNK-007", "Sports Sneakers",  80, 1200.0, 96000.0),
+            _Item("SKU-BAG-011", "Canvas Tote Bag",  50,  230.0, 11500.0),
+            _Item("SKU-JNS-042", "Denim Jeans",      30,  650.0, 19500.0),
+            _Item("SKU-SNK-007", "Sports Sneakers",   8, 1200.0,  9600.0),
         ]
         return plan
     else:
         from planner_agent.planner import PlannerAgent
-        EMAIL = "Hi, supply: SKU-TSH-001 x300 @Rs180, SKU-JNS-042 x150 @Rs650, SKU-SNK-007 x80 @Rs1200. Delivery 2025-07-15. ramesh@sunrise-textiles.in"
+        EMAIL = """Hi, please supply:
+        SKU-BAG-011 Canvas Tote Bag x50 @ Rs.230
+        SKU-JNS-042 Denim Jeans x30 @ Rs.650
+        SKU-SNK-007 Sports Sneakers x8 @ Rs.1200
+        Delivery: 2025-07-15. ramesh@sunrise-textiles.in"""
         return PlannerAgent().parse_email(email_body=EMAIL, subject="Restocking Confirmation")
 
 
-def main():
-    print("\n" + "="*62)
-    print("  BusinessFlow AI - Full Pipeline Demo")
-    print("  Planner  ->  Retriever  ->  Policy Layer")
-    print("="*62)
+def divider(title=""):
+    if title:
+        pad = (58 - len(title) - 2) // 2
+        print(f"\n{'='*pad} {title} {'='*pad}")
+    else:
+        print("=" * 62)
 
-    print("\n[STAGE 1] Planner Agent")
-    print("-"*40)
+
+def main():
+    divider()
+    print("  BusinessFlow AI — Complete Pipeline Demo")
+    print("  Planner → Retriever → Policy Layer → Executor Agent")
+    divider()
+
+    # ── STAGE 1: Planner ─────────────────────────────────────────
+    print("\n[STAGE 1] Planner Agent — Parsing supplier email")
+    print("-" * 50)
+    if USE_MOCK_PLAN:
+        print("  (No Azure key — using mock plan)")
     plan = get_plan()
     print(f"  Plan ID     : {plan.plan_id}")
     print(f"  Supplier    : {plan.supplier_name}")
+    print(f"  Email       : {plan.supplier_email}")
     print(f"  Items       : {len(plan.line_items)}")
     print(f"  Order Value : Rs.{plan.total_order_value:,.2f}")
     print(f"  Confidence  : {plan.confidence_score * 100:.0f}%")
 
-    print("\n[STAGE 2] Retriever Agent")
-    print("-"*40)
+    # ── STAGE 2: Retriever ───────────────────────────────────────
+    print("\n[STAGE 2] Retriever Agent — Fetching inventory")
+    print("-" * 50)
     from retriever_agent.retriever import RetrieverAgent
     context = RetrieverAgent(backend="mock").retrieve(plan)
-    icons = {"OUT_OF_STOCK": "[RED]", "LOW_STOCK": "[YELLOW]", "ADEQUATE": "[GREEN]"}
+    icons = {"OUT_OF_STOCK": "🔴", "LOW_STOCK": "🟡", "ADEQUATE": "🟢"}
     for s in context.sku_contexts:
-        print(f"  {icons.get(s.stock_status,'?')} [{s.sku_id}] {s.product_name} | Stock: {s.current_stock} | Status: {s.stock_status}")
-    print(f"\n  Total DB Stock Value: Rs.{context.total_current_stock_value:,.2f}")
+        icon = icons.get(s.stock_status, "?")
+        print(f"  {icon} [{s.sku_id}] {s.product_name}")
+        print(f"      Stock: {s.current_stock} | Threshold: {s.reorder_threshold} | {s.stock_status}")
 
-    print("\n[STAGE 3] Policy Layer")
-    print("-"*40)
-    from policy_layer.policy import PolicyLayer, PolicyConfig
+    # ── STAGE 3: Policy Layer ────────────────────────────────────
+    print("\n[STAGE 3] Policy Layer — Evaluating governance rules")
+    print("-" * 50)
+    from policy_layer.policy import PolicyLayer, PolicyConfig, Decision
     policy = PolicyLayer(PolicyConfig(auto_approve_limit=50000.0))
     decision = policy.evaluate(plan, context)
 
-    icons2 = {"AUTO_APPROVE": "[APPROVED]", "ESCALATE": "[ESCALATED]", "REJECT": "[REJECTED]"}
-    print(f"\n  {icons2.get(decision.decision.value,'?')} VERDICT: {decision.decision.value}")
-    print(f"  Order Value : Rs.{decision.total_order_value:,.2f}")
+    verdict_icons = {
+        Decision.AUTO_APPROVE: "✅",
+        Decision.ESCALATE:     "⚠️ ",
+        Decision.REJECT:       "❌",
+    }
+    print(f"  {verdict_icons[decision.decision]} VERDICT: {decision.decision.value}")
     for r in decision.reasons:
-        print(f"  Reason      : {r}")
-
-    if decision.needs_human:
-        print(f"\n  >> Escalated to: {decision.requires_approval_from}")
-        for item in decision.escalated_items:
-            print(f"     - {item}")
-
-    if decision.auto_approved_items:
-        print("\n  >> Auto-approved:")
-        for item in decision.auto_approved_items:
-            print(f"     - {item}")
-
+        print(f"  Reason : {r}")
     print("\n  Rule Audit Trail:")
     for r in decision.rule_results:
         status = "FIRED  " if r.triggered else "passed "
-        print(f"    [{status}] {r.rule_name:<25} | {r.reason[:55]}")
+        print(f"    [{status}] {r.rule_name:<25} {r.reason[:52]}")
 
-    # Bonus: small order demo
-    print("\n" + "-"*62)
-    print("  BONUS: Small order Rs.11,500 (SKU-BAG-011 x50)")
-    print("-"*62)
-    from dataclasses import dataclass, field
+    # ── STAGE 4: Executor Agent ──────────────────────────────────
+    print("\n[STAGE 4] Executor Agent — Executing approved actions")
+    print("-" * 50)
 
-    @dataclass
-    class _SI:
-        sku_id: str = "SKU-BAG-011"; product_name: str = "Canvas Tote Bag"
-        quantity: int = 50; unit_price: float = 230.0; total_cost: float = 11500.0
+    if decision.decision != Decision.AUTO_APPROVE:
+        print(f"  ⚠️  Order not auto-approved ({decision.decision.value}).")
+        print(f"  Escalated to: {decision.requires_approval_from}")
+        print("  Skipping execution — would await dashboard approval.")
+    else:
+        from executor_agent.executor import ExecutorAgent, MockNotifier
+        notifier = MockNotifier()
+        agent = ExecutorAgent(backend="mock", notifier=notifier)
+        result = agent.execute(plan, context, decision)
 
-    @dataclass
-    class _SP:
-        plan_id: str = "demo-plan-002"; supplier_name: str = "Test"
-        supplier_email: str = "t@t.com"; email_subject: str = "Small"
-        line_items: list = field(default_factory=list)
-        total_order_value: float = 11500.0; confidence_score: float = 0.92
-        delivery_date: str = "2025-07-20"
+        status_icon = "✅" if result.success else "❌"
+        print(f"  {status_icon} Execution: {'SUCCESS' if result.success else 'FAILED'}")
 
-    sp = _SP(); sp.line_items = [_SI()]
-    sc = RetrieverAgent(backend="mock").retrieve(sp)
-    sd = policy.evaluate(sp, sc)
-    print(f"  {icons2.get(sd.decision.value,'?')} VERDICT: {sd.decision.value}")
-    print(f"  Rs.{sd.total_order_value:,.2f} | Reason: {sd.reasons[0]}")
-    print("="*62 + "\n")
+        if result.success:
+            print(f"\n  📦 Purchase Orders Created ({result.orders_created}):")
+            for po in result.purchase_orders:
+                print(f"    [{po.po_id}] {po.sku_id} | qty={po.quantity_ordered} "
+                      f"| Rs.{po.total_cost:,.2f} | {po.status}")
+
+            print(f"\n  📊 Inventory Updates:")
+            for u in result.inventory_updates:
+                print(f"    {u['sku_id']}: {u['old_stock']} → {u['new_stock']} (+{u['added']})")
+
+            if result.skipped_items:
+                print(f"\n  ⏭️  Skipped Items:")
+                for s in result.skipped_items:
+                    print(f"    - {s}")
+
+            print(f"\n  📧 Notification: {'Sent' if result.notification_sent else 'Failed'}")
+            if notifier.sent:
+                print(f"    To      : {notifier.sent[0]['to']}")
+                print(f"    Subject : {notifier.sent[0]['subject']}")
+
+            print(f"\n  📋 Audit Log ({len(result.audit_entries)} entries):")
+            for entry in result.audit_entries:
+                print(f"    [{entry.created_at[11:19]}] {entry.action:<22} {entry.details[:48]}")
+
+            print(f"\n  💰 Total Executed Value: Rs.{result.total_executed_value:,.2f}")
+
+    # ── Pipeline summary ─────────────────────────────────────────
+    divider("PIPELINE COMPLETE")
+    print(f"  Plan       : {plan.plan_id}")
+    print(f"  Supplier   : {plan.supplier_name}")
+    print(f"  Order Value: Rs.{plan.total_order_value:,.2f}")
+    print(f"  Decision   : {decision.decision.value}")
+    if decision.decision == Decision.AUTO_APPROVE:
+        print(f"  Executed   : {result.orders_created} POs | Rs.{result.total_executed_value:,.2f}")
+        print(f"  Time saved : ~25 minutes of manual ops work")
+    divider()
+    print()
+
 
 if __name__ == "__main__":
     main()
