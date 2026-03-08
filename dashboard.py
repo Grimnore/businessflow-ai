@@ -352,6 +352,17 @@ section[data-testid="stSidebar"] .block-container { padding: 1rem !important; }
 .empty-icon  { font-size: 2.5rem; margin-bottom: 0.7rem; }
 .empty-title { font-size: 1rem; font-weight: 600; color: var(--offwhite); margin-bottom: 0.3rem; }
 
+/* Sidebar toggle — bottom padding fix + clean button */
+section[data-testid="stSidebar"] > div:first-child {
+    padding-bottom: 120px !important;
+}
+[data-testid="collapsedControl"] {
+    z-index: 99999 !important;
+    background: #00D4E0 !important;
+    border-radius: 0 8px 8px 0 !important;
+}
+[data-testid="collapsedControl"] svg { fill: #080F1A !important; }
+
 /* Expander */
 [data-testid="stExpander"] { border: 1px solid var(--border) !important; border-radius: 8px !important; background: var(--navycard) !important; }
 details summary { font-size: 0.8rem !important; font-family: 'Plus Jakarta Sans', sans-serif !important; }
@@ -566,6 +577,7 @@ def render_sidebar():
             🗄️ Azure SQL updated<br>
             📊 Dashboard updated
         </div>
+        <div style='padding-bottom: 120px'></div>
         """, unsafe_allow_html=True)
 
         return page
