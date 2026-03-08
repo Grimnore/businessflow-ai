@@ -7,7 +7,7 @@ azure-identity>=1.17.1
 openai>=1.35.0          # AzureOpenAI client
 
 # Data validation
-pydantic>=2.0.0       # v1 API (compatible with SK and older Azure SDKs)
+pydantic==2.11.10       # v1 API (compatible with SK and older Azure SDKs)
 
 # Microsoft Semantic Kernel (orchestration — used by orchestrator layer)
 semantic-kernel>=1.14.0
