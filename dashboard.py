@@ -299,6 +299,22 @@ section[data-testid="stSidebar"] .block-container { padding: 1rem !important; }
 .chk-ok   { color: var(--green);  font-size: 0.95rem; margin-top: 0.05rem; }
 .chk-warn { color: var(--amber);  font-size: 0.95rem; margin-top: 0.05rem; }
 
+/* ── Menu toggle button ── */
+div[data-testid="stButton"] button[kind="secondary"] {
+    background: transparent !important;
+    border: 1px solid #1A2E42 !important;
+    color: #00D4E0 !important;
+    font-size: 1.2rem !important;
+    padding: 0.3rem 0.6rem !important;
+    border-radius: 8px !important;
+    line-height: 1 !important;
+    min-height: unset !important;
+}
+div[data-testid="stButton"] button[kind="secondary"]:hover {
+    background: rgba(0,212,224,0.1) !important;
+    border-color: #00D4E0 !important;
+}
+
 /* ── Buttons ── */
 .stButton > button {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
@@ -586,18 +602,30 @@ def render_sidebar():
 # ── Brand header bar ──────────────────────────────────────────────────────────
 
 def render_header(subtitle=""):
-    st.markdown(f"""
-    <div class="brand-bar">
-        <div class="brand-left">
-            <div class="brand-logo">BusinessFlow<span>AI</span></div>
-            <div class="brand-team">NEURONEKOS · IIT MADRAS</div>
-            {"<div style='font-size:0.78rem;color:#6B8FA8;margin-left:0.5rem'>/ " + subtitle + "</div>" if subtitle else ""}
+    col_menu, col_brand = st.columns([0.06, 0.94])
+    with col_menu:
+        st.markdown("<div style='padding-top:0.3rem'>", unsafe_allow_html=True)
+        if st.button("☰", key="menu_toggle", help="Open / close navigation"):
+            # Toggle sidebar state
+            if "sidebar_open" not in st.session_state:
+                st.session_state.sidebar_open = True
+            else:
+                st.session_state.sidebar_open = not st.session_state.sidebar_open
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_brand:
+        sub_html = f"<div style='font-size:0.78rem;color:#6B8FA8;margin-left:0.5rem'>/ {subtitle}</div>" if subtitle else ""
+        st.markdown(f"""
+        <div class="brand-bar" style="position:static;border-radius:10px;margin-bottom:0.2rem">
+            <div class="brand-left">
+                <div class="brand-logo">BusinessFlow<span>AI</span></div>
+                <div class="brand-team">NEURONEKOS · IIT MADRAS</div>
+                {sub_html}
+            </div>
+            <div class="brand-right">
+                <span class="live-dot"></span> Pipeline Active · Microsoft AI Unlocked
+            </div>
         </div>
-        <div class="brand-right">
-            <span class="live-dot"></span> Pipeline Active · Microsoft AI Unlocked
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 
 # ── Pipeline strip ────────────────────────────────────────────────────────────
