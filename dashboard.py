@@ -60,14 +60,23 @@ section[data-testid="stSidebar"] .block-container { padding: 1rem !important; }
 
 /* Sidebar toggle */
 [data-testid="collapsedControl"] {
-    background-color: var(--navymid) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 0 6px 6px 0 !important;
-    top: 50% !important; transform: translateY(-50%) !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: var(--cyan) !important;
+    border: none !important;
+    border-radius: 0 8px 8px 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 24px !important;
+    height: 48px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    box-shadow: 2px 0 12px rgba(0,212,224,0.3) !important;
 }
-[data-testid="collapsedControl"]:hover { background-color: var(--cyan) !important; }
-[data-testid="collapsedControl"] svg { fill: var(--cyan) !important; }
-[data-testid="collapsedControl"]:hover svg { fill: var(--navy) !important; }
+[data-testid="collapsedControl"]:hover { background-color: #00f0fc !important; box-shadow: 2px 0 18px rgba(0,212,224,0.5) !important; }
+[data-testid="collapsedControl"] svg { fill: var(--navy) !important; width: 14px !important; height: 14px !important; }
 
 /* ── Main content padding ── */
 .main-wrap { padding: 1.8rem 2.2rem; }
