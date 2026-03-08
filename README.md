@@ -184,6 +184,6 @@ GRAPH_MONITORED_MAILBOX=
 
 ## Approval Dashboard
 
-Live: `https://businessflow-ai-neuronekos.streamlit.app`
+Live: `https://businessflow-ai.streamlit.app`
 
 ---
