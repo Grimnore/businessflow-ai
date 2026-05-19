@@ -5,7 +5,7 @@
 
 ## What It Does
 
-BusinessFlow AI reads supplier emails, checks live inventory, evaluates order policy, and places purchase orders automatically — flagging only the orders that genuinely need a human decision.
+BusinessFlow AI reads supplier emails, checks live inventory, evaluates order policy, and places purchase orders automatically: flagging only the orders that genuinely need a human decision.
 
 A ₹10,000 restock from a verified supplier? Handled in under 60 seconds, no interruption.  
 A ₹2,50,000 order from a new supplier? Flagged to the manager with full context and one-click approval.
